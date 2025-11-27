@@ -1,78 +1,143 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+// pages/index.tsx
+import { useState } from "react";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+type Task = { title: string; assignee?: string; due?: string; priority?: string };
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const SAMPLE = `- Action: Integrate payments API by next Wednesday. Assigned to Ravi.
+- Please prepare the onboarding doc by Friday. Alice will lead.
+We will discuss metrics next meeting. John will propose KPIs.`;
+
+function cleanFollowUp(text: string) {
+  // basic cleanup: remove duplicated punctuation and trim
+  return text
+    .replace(/\s+([.,;:!?])/g, "$1")         // remove space before punctuation
+    .replace(/([.]){2,}/g, ".")              // collapse repeated periods
+    .replace(/\s{2,}/g, " ")                 // collapse multiple spaces
+    .trim();
+}
 
 export default function Home() {
+  const [input, setInput] = useState("");
+  const [result, setResult] = useState<{ tasks: Task[]; followUp: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleAnalyze(text?: string) {
+    const payloadText = text ?? input;
+    if (!payloadText) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: payloadText }),
+      });
+      const data = await res.json();
+      // run client-side cleanup of followUp
+      if (data?.followUp) data.followUp = cleanFollowUp(data.followUp);
+      setResult(data);
+    } catch (err) {
+      alert("Error: " + (err as any).toString());
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div
-      className={`${geistSans.className} ${geistMono.className} flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black`}
-    >
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the index.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <main style={{ padding: 28, fontFamily: "Inter, Arial, sans-serif", maxWidth: 980, margin: "0 auto", color: "#111" }}>
+      <h1 style={{ fontSize: 22, marginBottom: 6 }}>Smart Action Extractor (MVP)</h1>
+      <p style={{ marginTop: 0, color: "#444" }}>Paste meeting notes or an email. Click <strong>Analyze</strong> to extract tasks and a follow-up.</p>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={() => handleAnalyze(SAMPLE)}
+          style={{ padding: "8px 12px", borderRadius: 6, cursor: "pointer" }}
+        >
+          Use sample notes
+        </button>
+
+        <button
+          onClick={() => {
+            setInput(SAMPLE);
+            setResult(null);
+          }}
+          style={{ padding: "8px 12px", borderRadius: 6, cursor: "pointer" }}
+        >
+          Fill textarea with sample
+        </button>
+      </div>
+
+      <textarea
+        placeholder="Paste meeting notes or email here..."
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        rows={8}
+        style={{
+          width: "100%",
+          fontSize: 14,
+          padding: 12,
+          borderRadius: 8,
+          marginTop: 12,
+          boxSizing: "border-box",
+          background: "#fff",
+          border: "1px solid #e6e6e6",
+        }}
+      />
+
+      <div style={{ marginTop: 12 }}>
+        <button
+          onClick={() => handleAnalyze()}
+          disabled={loading || !input}
+          style={{
+            padding: "10px 16px",
+            borderRadius: 8,
+            cursor: loading || !input ? "not-allowed" : "pointer",
+            background: "#0b5cff",
+            color: "white",
+            border: "none",
+          }}
+        >
+          {loading ? "Analyzing..." : "Analyze"}
+        </button>
+      </div>
+
+      {result && (
+        <section style={{ marginTop: 22 }}>
+          <h2 style={{ fontSize: 18 }}>Extracted Tasks</h2>
+          <ul>
+            {result.tasks.map((t, i) => (
+              <li key={i} style={{ marginBottom: 8, lineHeight: 1.4 }}>
+                <strong>{t.title}</strong>
+                {t.assignee ? ` — ${t.assignee}` : ""} {t.due ? ` — due ${t.due}` : ""} {t.priority ? ` — ${t.priority}` : ""}
+              </li>
+            ))}
+          </ul>
+
+          <h3 style={{ fontSize: 16, marginTop: 12 }}>Suggested Follow-up</h3>
+          <div style={{ whiteSpace: "pre-wrap", padding: 12, border: "1px solid #e6e6e6", borderRadius: 8, background: "#fff" }}>
+            {result.followUp}
+          </div>
+
+          <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+            <button
+              onClick={() => navigator.clipboard.writeText(result.followUp)}
+              style={{ padding: "8px 12px", borderRadius: 6, cursor: "pointer" }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Copy follow-up
+            </button>
+            <button
+              onClick={() => {
+                // create a mailto with follow-up in body
+                const subject = encodeURIComponent("Meeting follow-up / next actions");
+                const body = encodeURIComponent(result.followUp);
+                window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
+              }}
+              style={{ padding: "8px 12px", borderRadius: 6, cursor: "pointer" }}
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs/pages/getting-started?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              Open email draft
+            </button>
+          </div>
+        </section>
+      )}
+    </main>
   );
 }
