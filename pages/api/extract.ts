@@ -130,4 +130,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    const { text
+    const body = req.body as { text?: string };
+    const text = body.text ?? "";
+  
+
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "No text provided" });
+    }
+
+    // Try OpenAI path if enabled
+    if (USE_OPENAI && OPENAI_API_KEY) {
+      try {
+        const out = await callOpenAIExtract(text);
+        return res.status(200).json(out);
+      } catch (openErr) {
+        // Log the OpenAI error, but fall back to mock parser so the demo still works.
+        console.error("OpenAI extraction failed, falling back to mock:", openErr);
+      }
+    }
+
+    // Fallback: mock extraction
+    const out = mockExtract(text);
+    return res.status(200).json(out);
+  } catch (err) {
+    console.error("API /api/extract error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
